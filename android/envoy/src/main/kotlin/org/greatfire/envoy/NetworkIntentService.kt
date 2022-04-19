@@ -29,9 +29,11 @@ private const val EXTRA_PARAM_SUBMIT = "org.greatfire.envoy.extra.PARAM_SUBMIT"
 
 // Defines a custom Intent action
 const val BROADCAST_VALID_URL_FOUND = "org.greatfire.envoy.VALID_URL_FOUND"
+const val BROADCAST_NO_URL_FOUND = "org.greatfire.envoy.NO_URL_FOUND"
 
 // Defines the key for the status "extra" in an Intent
 const val EXTENDED_DATA_VALID_URLS = "org.greatfire.envoy.VALID_URLS"
+const val EXTENDED_DATA_INVALID_URLS = "org.greatfire.envoy.INVALID_URLS"
 
 const val PREF_VALID_URLS = "validUrls"
 
@@ -69,10 +71,12 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
     override fun onHandleIntent(intent: Intent?) {
         when (intent?.action) {
             ACTION_SUBMIT -> {
+                Log.d(TAG, "SUBMIT ACTION")
                 val urls = intent.getStringArrayListExtra(EXTRA_PARAM_SUBMIT)
                 handleActionSubmit(urls)
             }
             ACTION_QUERY -> {
+                Log.d(TAG, "QUERY ACTION")
                 handleActionQuery()
             }
         }
@@ -85,6 +89,9 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
 
     // sorted by latency, from the the fastest one
     fun getValidUrls(): List<String> {
+
+        Log.d(TAG, "getValidUrls CALLED")
+
         if (validUrls.isNotEmpty()) {
             return validUrls
         }
@@ -107,8 +114,14 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
      */
     private fun handleActionSubmit(urls: List<String>?,
                                    captive_portal_url: String = "https://www.google.com/generate_204") {
+
+        Log.d(TAG, "HANDLE SUBMIT")
+
         val executor: Executor = Executors.newSingleThreadExecutor()
         urls?.forEachIndexed { index, envoyUrl ->
+
+            Log.d(TAG, "CHECKING URL " + index + ": " + envoyUrl)
+
             val myBuilder = CronetEngine.Builder(applicationContext)
             val cronetEngine: CronetEngine = myBuilder
                     .setEnvoyUrl(envoyUrl)
@@ -131,6 +144,9 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
      * parameters.
      */
     private fun handleActionQuery() {
+
+        Log.d(TAG, "HANDLE QUERY")
+
         val localIntent = Intent(BROADCAST_VALID_URL_FOUND).apply {
             // Puts the status into the Intent
             putStringArrayListExtra(EXTENDED_DATA_VALID_URLS, ArrayList(validUrls))
@@ -179,6 +195,9 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
                 info: UrlResponseInfo?,
                 newLocationUrl: String?
         ) {
+
+            Log.d(TAG, "CALLBACK REDIRECT")
+
             Log.i(TAG, "onRedirectReceived method called.")
             // You should call the request.followRedirect() method to continue
             // processing the request.
@@ -186,6 +205,9 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
         }
 
         override fun onResponseStarted(request: UrlRequest?, info: UrlResponseInfo?) {
+
+            Log.d(TAG, "CALLBACK RESPONSE")
+
             Log.i(TAG, "onResponseStarted method called.")
             // You should call the request.read() method before the request can be
             // further processed. The following instruction provides a ByteBuffer object
@@ -198,13 +220,22 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
                 info: UrlResponseInfo?,
                 byteBuffer: ByteBuffer?
         ) {
+
+            Log.d(TAG, "CALLBACK COMPLETED")
+
             Log.i(TAG, "onReadCompleted method called.")
             // You should keep reading the request until there's no more data.
             request?.read(ByteBuffer.allocateDirect(102400))
         }
 
         override fun onSucceeded(request: UrlRequest?, info: UrlResponseInfo?) {
+
+            Log.d(TAG, "CALLBACK SUCCEEDED")
+
             if (info != null) {
+
+                Log.d(TAG, "ADD URL: " + envoyUrl)
+
                 this@NetworkIntentService.validUrls.add(envoyUrl)
                 // this@NetworkIntentService.handleActionQuery()
                 val sharedPreferences =
@@ -219,6 +250,8 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
                     putStringArrayListExtra(EXTENDED_DATA_VALID_URLS, ArrayList(validUrls))
                 }
                 LocalBroadcastManager.getInstance(this@NetworkIntentService).sendBroadcast(localIntent)
+            } else {
+                Log.d(TAG, "INFO NULL")
             }
         }
 
@@ -227,6 +260,14 @@ class NetworkIntentService : IntentService("NetworkIntentService") {
                 info: UrlResponseInfo?,
                 error: CronetException?
         ) {
+            Log.d(TAG, "CALLBACK FAILED: " + error)
+
+            val localIntent = Intent(BROADCAST_VALID_URL_FOUND).apply {
+                // Puts the status into the Intent
+                putExtra(EXTENDED_DATA_INVALID_URLS, "foo")
+            }
+            LocalBroadcastManager.getInstance(this@NetworkIntentService).sendBroadcast(localIntent)
+
             Log.i(TAG, "onFailed method called for " + info?.url + " " + error)
         }
     }

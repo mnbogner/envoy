@@ -14,6 +14,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -70,15 +71,22 @@ class ShadowsocksService : Service() {
         Runnable {
             val cmdArgs = arrayOf(executablePath, "-c", configFile.absolutePath)
             Log.i(TAG, """run ${cmdArgs.contentToString()}""")
+
+            val broadcastIntent = Intent(SHADOWSOCKS_SERVICE_BROADCAST)
+
             try {
                 Runtime.getRuntime().exec(cmdArgs)
-                val broadcastIntent = Intent()
-                broadcastIntent.action = "com.greatfire.envoy.SS_LOCAL_STARTED"
-                broadcastIntent.putExtra("org.greatfire.envoy.SS_LOCAL_STARTED.LOCAL_ADDRESS", localAddress)
-                broadcastIntent.putExtra("org.greatfire.envoy.SS_LOCAL_STARTED.LOCAL_PORT", localPort)
-                sendBroadcast(broadcastIntent)
+                //val broadcastIntent = Intent()
+                //broadcastIntent.action = "com.greatfire.envoy.SS_LOCAL_STARTED"
+                //broadcastIntent.putExtra("org.greatfire.envoy.SS_LOCAL_STARTED.LOCAL_ADDRESS", localAddress)
+                //broadcastIntent.putExtra("org.greatfire.envoy.SS_LOCAL_STARTED.LOCAL_PORT", localPort)
+                //sendBroadcast(broadcastIntent)
+                broadcastIntent.putExtra(SHADOWSOCKS_SERVICE_RESULT, SHADOWSOCKS_STARTED)
+                LocalBroadcastManager.getInstance(this@ShadowsocksService).sendBroadcast(broadcastIntent)
             } catch (e: IOException) {
                 Log.e(TAG, cmdArgs.contentToString(), e)
+                broadcastIntent.putExtra(SHADOWSOCKS_SERVICE_RESULT, SHADOWSOCKS_ERROR)
+                LocalBroadcastManager.getInstance(this@ShadowsocksService).sendBroadcast(broadcastIntent)
             }
         }.run()
 
@@ -90,8 +98,24 @@ class ShadowsocksService : Service() {
         return binder
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+
+        Log.e(ProxyService.TAG, "STOPPING SHADOWSOCKS SERVICE...")
+
+        // cleanup?  kill process?
+
+        // destroy the service
+        stopSelf()
+    }
+
     companion object {
         private const val TAG = "ShadowsocksService"
+
+        const val SHADOWSOCKS_SERVICE_BROADCAST = "SHADOWSOCKS_SERVICE_BROADCAST"
+        const val SHADOWSOCKS_SERVICE_RESULT = "SHADOWSOCKS_SERVICE_RESULT"
+        const val SHADOWSOCKS_STARTED = 200
+        const val SHADOWSOCKS_ERROR = -201
 
         private val pattern =
                 """(?i)ss://[-a-zA-Z0-9+&@#/%?=.~*'()|!:,;_\[\]]*[-a-zA-Z0-9+&@#/%=.~*'()|\[\]]""".toRegex()
